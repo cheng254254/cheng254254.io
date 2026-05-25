@@ -1,0 +1,1624 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>五子棋 - 禪風棋苑 (雲端一鍵對戰版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700;900&family=Inter:wght=300;400;600&display=swap');
+        
+        body {
+            font-family: 'Inter', 'Noto Serif TC', serif;
+            background-color: #0c0c0e;
+        }
+
+        /* 擬真木質棋盤漸變與落子立體微投影 */
+        .wood-board {
+            background: radial-gradient(circle, #f3c98b 0%, #d19f56 100%);
+            box-shadow: inset 0 0 30px rgba(0,0,0,0.25), 0 15px 35px rgba(0,0,0,0.6);
+        }
+
+        /* 滾動條美化 */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #141416;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #3f3f46;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="min-h-screen text-zinc-100 flex flex-col justify-between overflow-x-hidden">
+
+    <header class="w-full py-4 px-6 border-b border-zinc-800 bg-zinc-900/90 backdrop-blur flex justify-between items-center z-10">
+        <div class="flex items-center space-x-3">
+            <span class="text-2xl font-black bg-gradient-to-r from-amber-200 to-amber-500 bg-clip-text text-transparent flex items-center gap-2">
+                <svg class="w-8 h-8 text-amber-500 animate-spin-slow" viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                    <circle cx="9" cy="9" r="2.5" fill="currentColor"/>
+                    <circle cx="15" cy="15" r="2.5" fill="currentColor" opacity="0.8"/>
+                </svg>
+                禪風五子棋
+            </span>
+            <span class="text-[10px] text-zinc-400 border border-zinc-700 rounded-full px-2 py-0.5 hidden sm:inline-block">V3.2 Pro 一鍵連線版</span>
+        </div>
+        
+        <div class="flex items-center space-x-3">
+            <!-- 網路狀態燈 -->
+            <div id="connection-badge" class="flex items-center space-x-1.5 text-xs bg-zinc-950 px-3 py-1.5 rounded-full text-zinc-400 border border-zinc-800 transition-all">
+                <span id="connection-dot" class="w-2.5 h-2.5 rounded-full bg-zinc-600 animate-pulse"></span>
+                <span id="connection-text" class="font-medium">雲端載入中...</span>
+            </div>
+
+            <!-- 音效開關 -->
+            <button id="btn-sound" class="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 transition text-zinc-300 flex items-center" title="切換落子音效">
+                <svg id="icon-sound-on" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                </svg>
+                <svg id="icon-sound-off" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                </svg>
+            </button>
+            
+            <button id="btn-rules" class="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 transition text-zinc-300" title="查看弈規">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 flex flex-col lg:flex-row gap-6 items-center lg:items-stretch justify-center">
+        
+        <!-- 左側：多功能控制台 -->
+        <div class="w-full lg:w-85 flex flex-col justify-between gap-4 order-2 lg:order-1">
+            
+            <!-- 目前狀態與玩家面板 -->
+            <div class="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-4 flex flex-col gap-3">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-zinc-400 text-xs font-semibold tracking-wider uppercase">對局狀態</h2>
+                    <span id="role-indicator" class="text-xs bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-0.5 rounded-lg hidden">身份：觀戰中</span>
+                </div>
+                
+                <div class="flex justify-between items-center bg-zinc-950 p-3 rounded-xl border border-zinc-800/50">
+                    <!-- 黑方 -->
+                    <div id="player-black-panel" class="flex items-center space-x-3 p-2 rounded-xl transition-all duration-300 border border-transparent">
+                        <div class="w-9 h-9 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center shadow-md">
+                            <span class="text-white text-xs font-bold">黑</span>
+                        </div>
+                        <div>
+                            <p class="text-sm font-semibold text-white leading-tight" id="black-label">先手黑子</p>
+                            <p class="text-xs text-zinc-400" id="black-desc">本機玩家</p>
+                        </div>
+                    </div>
+                    
+                    <span class="text-zinc-600 font-black text-sm select-none">VS</span>
+
+                    <!-- 白方 -->
+                    <div id="player-white-panel" class="flex items-center space-x-3 p-2 rounded-xl transition-all duration-300 border border-transparent">
+                        <div class="w-9 h-9 rounded-full bg-zinc-100 border border-zinc-300 flex items-center justify-center shadow-md">
+                            <span class="text-black text-xs font-bold">白</span>
+                        </div>
+                        <div>
+                            <p class="text-sm font-semibold text-zinc-100 leading-tight" id="white-label">後手白子</p>
+                            <p class="text-xs text-zinc-400" id="white-desc">AI 智能</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 狀態播報 -->
+                <div id="turn-announcement" class="py-2.5 text-center bg-zinc-800 border border-zinc-700 rounded-xl text-zinc-200 font-semibold text-sm">
+                    載入對局中...
+                </div>
+            </div>
+
+            <!-- 棋局設定 -->
+            <div class="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-4 flex flex-col gap-3">
+                <h2 class="text-zinc-400 text-xs font-semibold tracking-wider uppercase">對弈設定</h2>
+                
+                <!-- 棋局模式 -->
+                <div>
+                    <label class="block text-xs text-zinc-400 mb-1.5">模式切換</label>
+                    <div class="grid grid-cols-3 gap-1 bg-zinc-950 p-1 rounded-xl border border-zinc-800/80">
+                        <button id="mode-pve" class="py-2 text-xs rounded-lg bg-amber-600/20 text-amber-300 border border-amber-500/40 font-bold transition">
+                            人機對戰
+                        </button>
+                        <button id="mode-pvp" class="py-2 text-xs rounded-lg text-zinc-400 transition hover:text-white">
+                            雙人同屏
+                        </button>
+                        <button id="mode-online" class="py-2 text-xs rounded-lg text-zinc-400 transition hover:text-white flex items-center justify-center gap-1">
+                            線上對決
+                        </button>
+                    </div>
+                </div>
+
+                <!-- AI 難度 -->
+                <div id="ai-difficulty-container">
+                    <label class="block text-xs text-zinc-400 mb-1.5">AI 深度</label>
+                    <div class="grid grid-cols-3 gap-1 bg-zinc-950 p-1 rounded-xl border border-zinc-800/80">
+                        <button id="diff-easy" class="py-1.5 text-xs rounded-lg text-zinc-400 transition hover:text-white">簡單</button>
+                        <button id="diff-medium" class="py-1.5 text-xs rounded-lg text-amber-400 font-bold bg-zinc-800">中等</button>
+                        <button id="diff-hard" class="py-1.5 text-xs rounded-lg text-zinc-400 transition hover:text-white">專家</button>
+                    </div>
+                </div>
+
+                <div id="online-lobby-container" class="hidden flex flex-col gap-3 border-t border-zinc-800/80 pt-3">
+                    <label class="block text-xs text-zinc-400">大廳配對與房間</label>
+                    
+                    <div class="grid grid-cols-2 gap-2">
+                        <button id="btn-quick-match" class="py-2 px-3 text-xs bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/40 font-bold rounded-xl transition flex items-center justify-center gap-1.5">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                            快速匹配
+                        </button>
+                        <button id="btn-create-room" class="py-2 px-3 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 font-bold rounded-xl transition flex items-center justify-center gap-1.5">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            建立房間
+                        </button>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <input id="input-room-code" type="text" maxlength="6" placeholder="輸入 6 位房間號" class="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-zinc-300 focus:outline-none focus:border-amber-500 text-center tracking-widest placeholder:tracking-normal">
+                        <button id="btn-join-room" class="px-4 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-xs font-bold rounded-xl transition text-zinc-200 border border-zinc-750">加入</button>
+                    </div>
+
+                    <div id="active-room-panel" class="hidden bg-zinc-950 border border-zinc-800 p-3 rounded-xl flex flex-col gap-2">
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="text-zinc-500">房間代號：</span>
+                            <span id="label-room-code" class="font-extrabold text-amber-400 tracking-wider text-sm">------</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-1.5">
+                            <button id="btn-copy-room" class="py-1.5 text-[11px] bg-zinc-900 hover:bg-zinc-800 text-zinc-300 rounded-lg border border-zinc-800 transition">一鍵複製連結</button>
+                            <button id="btn-leave-room" class="py-1.5 text-[11px] bg-red-950/20 hover:bg-red-950/40 text-red-400 border border-red-900/40 rounded-lg transition">離開房間</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 棋盤尺寸 -->
+                <div>
+                    <label class="block text-xs text-zinc-400 mb-1.5">棋盤大小</label>
+                    <select id="board-size-select" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-300 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-amber-500">
+                        <option value="15" selected>標準 15 × 15 棋盤</option>
+                        <option value="19">專業 19 × 19 棋盤</option>
+                        <option value="13">新手 13 × 13 棋盤</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- 回合控制與悔棋重來 -->
+            <div class="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-4 flex flex-col gap-2">
+                <button id="btn-restart" class="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:scale-[0.98] transition text-zinc-950 rounded-xl font-black flex justify-center items-center gap-2 shadow-lg shadow-amber-500/10">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89M9 11l3-3 3 3m-3-3v12" />
+                    </svg>
+                    重啟戰局
+                </button>
+                
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="btn-undo" class="py-2.5 bg-zinc-800 hover:bg-zinc-700 active:scale-[0.97] transition rounded-xl text-xs font-bold flex justify-center items-center gap-1.5 text-zinc-200 border border-zinc-700 disabled:opacity-30 disabled:pointer-events-none" disabled>
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.334 4z" />
+                        </svg>
+                        悔棋 (0)
+                    </button>
+                    <button id="btn-redo" class="py-2.5 bg-zinc-800 hover:bg-zinc-700 active:scale-[0.97] transition rounded-xl text-xs font-bold flex justify-center items-center gap-1.5 text-zinc-200 border border-zinc-700 disabled:opacity-30 disabled:pointer-events-none" disabled>
+                        復原
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.934 12.8a1 1 0 000-1.6L6.6 7.2A1 1 0 005 8v8a1 1 0 001.6.8l5.334-4z" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            
+        </div>
+
+        <div class="flex-1 flex flex-col justify-center items-center order-1 lg:order-2">
+            <div class="relative w-full max-w-[560px] aspect-square flex items-center justify-center">
+                <!-- 棋盤背光漸變特效 -->
+                <div class="absolute inset-0 bg-radial-gradient from-zinc-800/25 to-transparent pointer-events-none rounded-2xl"></div>
+                
+                <!-- 棋盤實體容器 -->
+                <div class="w-full h-full p-2.5 bg-zinc-900 border border-zinc-800/80 rounded-3xl shadow-2xl flex items-center justify-center">
+                    <canvas id="board-canvas" class="wood-board rounded-2xl cursor-pointer w-full h-full"></canvas>
+                </div>
+
+                <!-- 遊戲結算覆蓋層 -->
+                <div id="winner-overlay" class="absolute inset-0 bg-zinc-950/85 rounded-3xl flex flex-col items-center justify-center gap-4 transition-all opacity-0 pointer-events-none duration-500 scale-95 z-20">
+                    <div class="w-20 h-20 bg-amber-500/10 border border-amber-500/30 rounded-full flex items-center justify-center text-amber-400 animate-bounce">
+                        <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138z" />
+                        </svg>
+                    </div>
+                    <h3 id="winner-title" class="text-3xl font-black text-white tracking-wider">黑子 獲勝！</h3>
+                    <p id="winner-reason" class="text-zinc-400 text-sm">五子相連，完美的攻勢！</p>
+                    <button id="btn-overlay-restart" class="mt-2 px-8 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-zinc-950 rounded-xl font-bold hover:from-amber-600 hover:to-amber-700 transition active:scale-95 shadow-md shadow-amber-500/20">
+                        再奕一盤
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+    </main>
+
+    <div id="modal-rules" class="fixed inset-0 bg-black/80 backdrop-blur-sm flex justify-center items-center z-50 opacity-0 pointer-events-none transition-all duration-300">
+        <div class="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-md w-full p-6 mx-4 relative shadow-2xl">
+            <button id="btn-close-rules" class="absolute top-4 right-4 text-zinc-400 hover:text-white transition">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+            <h4 class="text-xl font-bold text-amber-400 border-b border-zinc-800 pb-2 mb-4">弈道棋規</h4>
+            <div class="space-y-3.5 text-xs text-zinc-300">
+                <p>1. <strong>輪流落子：</strong>黑子先手、白子後手，雙方輪流在棋盤交叉點上落下一子。</p>
+                <p>2. <strong>獲勝條件：</strong>在橫、直、斜任一方向最先形成<strong>連續五個（或以上）</strong>同色棋子者即為獲勝。</p>
+                <p>3. <strong>一鍵對戰：</strong>建立房間並點選「一鍵複製連結」，將連結傳給朋友，朋友點開就能自動連入與您下棋。</p>
+                <p>4. <strong>輔助功能：</strong>滑鼠移過棋盤時會顯示預覽線，本地對戰時支持任意多步悔棋。</p>
+            </div>
+            <button id="btn-confirm-rules" class="mt-6 w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 transition text-white font-bold rounded-xl border border-zinc-700">
+                我已了解
+            </button>
+        </div>
+    </div>
+
+    <div id="toast-container" class="fixed bottom-5 right-5 flex flex-col gap-2 z-50 max-w-sm pointer-events-none"></div>
+
+    <footer class="w-full py-3 text-center border-t border-zinc-800/80 bg-zinc-950/40 text-xs text-zinc-500">
+        禪風五子棋苑 © 2026. 智慧與心境落子
+    </footer>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // 接管 Firebase 環境
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'gomoku-zen-edition';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "",
+            authDomain: "mock-firebase.firebaseapp.com",
+            projectId: "mock-firebase",
+            storageBucket: "mock-firebase.appspot.com",
+            messagingSenderId: "12345678",
+            appId: "1:123:web:123"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        let currentUser = null;
+        let onlineMode = false;
+        let myPlayerColor = null;       // 1: 黑方 (建立者), 2: 白方 (加入者)
+        let currentRoomId = null;
+        let unsubscribeRoom = null;
+        let dbAuthReady = false;
+
+        // --- Tone.js 聲音合成引擎 ---
+        let soundEnabled = true;
+        let stoneSynthNoise;
+        let stoneSynthTone;
+
+        function initAudioEngine() {
+            try {
+                stoneSynthNoise = new Tone.NoiseSynth({
+                    noise: { type: 'pink' },
+                    envelope: { attack: 0.001, decay: 0.04, sustain: 0 }
+                }).toDestination();
+                
+                stoneSynthTone = new Tone.Synth({
+                    oscillator: { type: 'sine' },
+                    envelope: { attack: 0.001, decay: 0.07, sustain: 0, release: 0.07 }
+                }).toDestination();
+                stoneSynthTone.volume.value = -10;
+                
+                window.playStoneSound = () => {
+                    if (!soundEnabled) return;
+                    if (Tone.context.state !== 'running') {
+                        Tone.start();
+                    }
+                    stoneSynthNoise.triggerAttack();
+                    stoneSynthTone.triggerAttackRelease("C3", "32n");
+                };
+            } catch (e) {
+                console.warn("音訊引擎啟動失敗:", e);
+                window.playStoneSound = () => {};
+            }
+        }
+
+        const btnSound = document.getElementById('btn-sound');
+        const iconSoundOn = document.getElementById('icon-sound-on');
+        const iconSoundOff = document.getElementById('icon-sound-off');
+        
+        btnSound.addEventListener('click', () => {
+            soundEnabled = !soundEnabled;
+            if (soundEnabled) {
+                iconSoundOn.classList.remove('hidden');
+                iconSoundOff.classList.add('hidden');
+                if (!stoneSynthNoise) initAudioEngine();
+            } else {
+                iconSoundOn.classList.add('hidden');
+                iconSoundOff.classList.remove('hidden');
+            }
+        });
+
+        document.body.addEventListener('click', function setupAudioTrigger() {
+            initAudioEngine();
+            document.body.removeEventListener('click', setupAudioTrigger);
+        }, { once: true });
+
+        // --- STREAMING_CHUNK: 核心遊戲邏輯與繪圖變數設定 ---
+        const canvas = document.getElementById('board-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        let boardSize = 15;
+        let board = [];
+        let currentTurn = 1; // 1: 黑子, 2: 白子
+        let gameMode = 'pve'; 
+        let aiDifficulty = 'medium';
+        let gameOver = false;
+        let lastMove = null;
+        let winningLine = [];
+        let hoverCell = null;
+        
+        let history = [];
+        let redoStack = [];
+
+        let cellSize = 0;
+        let padding = 0;
+
+        // --- STREAMING_CHUNK: 執行雲端匿名授權 ---
+        async function authenticateUser() {
+            try {
+                const badge = document.getElementById('connection-badge');
+                const dot = document.getElementById('connection-dot');
+                const text = document.getElementById('connection-text');
+
+                let userCredential;
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    userCredential = await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    userCredential = await signInAnonymously(auth);
+                }
+                
+                currentUser = userCredential.user;
+                dbAuthReady = true;
+
+                dot.className = "w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-md shadow-emerald-500/50";
+                text.innerText = "大廳連線成功";
+                console.log("Authenticated as:", currentUser.uid);
+            } catch (error) {
+                console.error("Auth failed:", error);
+                const text = document.getElementById('connection-text');
+                const dot = document.getElementById('connection-dot');
+                dot.className = "w-2.5 h-2.5 rounded-full bg-red-500";
+                text.innerText = "雲端未連線";
+                showToast("雲端網路建立失敗，將只提供本機與AI功能", "error");
+            }
+        }
+
+        function showToast(message, type = "info") {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            let color = "bg-zinc-900 border-zinc-850 text-slate-100";
+            if (type === "success") color = "bg-emerald-950/90 border-emerald-800 text-emerald-200";
+            if (type === "error") color = "bg-red-950/90 border-red-800 text-red-200";
+            if (type === "warning") color = "bg-amber-950/90 border-amber-800 text-amber-200";
+
+            toast.className = `p-3.5 rounded-xl border text-xs font-semibold shadow-xl flex items-center space-x-2 transition-all duration-300 transform translate-y-2 opacity-0 pointer-events-auto ${color}`;
+            toast.innerHTML = `
+                <span class="flex-1">${message}</span>
+                <button class="text-zinc-500 hover:text-white">&times;</button>
+            `;
+
+            toast.querySelector('button').onclick = () => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            };
+
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.remove('opacity-0', 'translate-y-2');
+                toast.classList.add('opacity-100', 'translate-y-0');
+            }, 10);
+
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.classList.add('opacity-0', 'translate-y-2');
+                    setTimeout(() => toast.remove(), 300);
+                }
+            }, 4000);
+        }
+
+        // --- STREAMING_CHUNK: 棋盤繪製與響應式螢幕自適應 ---
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            let size = Math.min(rect.width, rect.height) - 20;
+            
+            if (size <= 0 || isNaN(size)) {
+                size = 400;
+            }
+            
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = size * dpr;
+            canvas.height = size * dpr;
+            ctx.scale(dpr, dpr);
+            
+            canvas.style.width = size + 'px';
+            canvas.style.height = size + 'px';
+            
+            padding = size / (boardSize + 1);
+            cellSize = (size - padding * 2) / (boardSize - 1);
+            
+            if (isNaN(cellSize) || cellSize <= 0) {
+                cellSize = 20;
+            }
+            if (isNaN(padding) || padding <= 0) {
+                padding = 20;
+            }
+            
+            drawBoard();
+        }
+
+        function initGame() {
+            board = Array(boardSize).fill(null).map(() => Array(boardSize).fill(0));
+            currentTurn = 1;
+            gameOver = false;
+            lastMove = null;
+            winningLine = [];
+            hoverCell = null;
+            history = [];
+            redoStack = [];
+            
+            updateUndoRedoButtons();
+            hideWinnerOverlay();
+            updateTurnIndicator();
+            drawBoard();
+        }
+
+        function getStarPoints(size) {
+            if (size === 15) {
+                return [
+                    {r: 3, c: 3}, {r: 3, c: 11},
+                    {r: 7, c: 7},
+                    {r: 11, c: 3}, {r: 11, c: 11}
+                ];
+            } else if (size === 19) {
+                return [
+                    {r: 3, c: 3}, {r: 3, c: 9}, {r: 3, c: 15},
+                    {r: 9, c: 3}, {r: 9, c: 9}, {r: 9, c: 15},
+                    {r: 15, c: 3}, {r: 15, c: 9}, {r: 15, c: 15}
+                ];
+            } else if (size === 13) {
+                return [
+                    {r: 3, c: 3}, {r: 3, c: 9},
+                    {r: 6, c: 6},
+                    {r: 9, c: 3}, {r: 9, c: 9}
+                ];
+            }
+            return [];
+        }
+
+        // --- STREAMING_CHUNK: 繪製網格與落子輔助線 ---
+        function drawBoard() {
+            if (!board || board.length < boardSize) return;
+
+            const width = canvas.width / (window.devicePixelRatio || 1);
+            const height = canvas.height / (window.devicePixelRatio || 1);
+            
+            ctx.clearRect(0, 0, width, height);
+
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
+            ctx.lineWidth = 1;
+
+            ctx.strokeStyle = '#5a3d1c';
+            ctx.lineWidth = 1.2;
+            for (let i = 0; i < boardSize; i++) {
+                ctx.beginPath();
+                ctx.moveTo(padding, padding + i * cellSize);
+                ctx.lineTo(width - padding, padding + i * cellSize);
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.moveTo(padding + i * cellSize, padding);
+                ctx.lineTo(padding + i * cellSize, height - padding);
+                ctx.stroke();
+            }
+
+            ctx.fillStyle = '#5a3d1c';
+            const starPoints = getStarPoints(boardSize);
+            starPoints.forEach(pt => {
+                ctx.beginPath();
+                const starRadius = Math.max(1.2, cellSize * 0.1);
+                ctx.arc(padding + pt.c * cellSize, padding + pt.r * cellSize, starRadius, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // 繪製全盤棋子
+            for (let r = 0; r < boardSize; r++) {
+                if (!board[r]) continue;
+                for (let c = 0; c < boardSize; c++) {
+                    if (board[r][c] !== 0 && board[r][c] !== undefined) {
+                        drawStone(r, c, board[r][c]);
+                    }
+                }
+            }
+
+            // 繪製滑鼠 hover 落子預覽
+            if (hoverCell && board[hoverCell.r] && board[hoverCell.r][hoverCell.c] === 0 && !gameOver) {
+                const isMyTurn = !onlineMode || (currentTurn === myPlayerColor);
+                const isAITurn = gameMode === 'pve' && currentTurn === 2;
+                
+                if (isMyTurn && !isAITurn) {
+                    ctx.save();
+                    ctx.globalAlpha = 0.55;
+                    drawStone(hoverCell.r, hoverCell.c, currentTurn);
+                    ctx.restore();
+                    
+                    ctx.strokeStyle = currentTurn === 1 ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.4)';
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([4, 4]);
+                    
+                    const hX = padding + hoverCell.c * cellSize;
+                    const hY = padding + hoverCell.r * cellSize;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(padding, hY); ctx.lineTo(width - padding, hY);
+                    ctx.moveTo(hX, padding); ctx.lineTo(hX, height - padding);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+            }
+
+            // 標記最後一手棋
+            if (lastMove) {
+                const lmX = padding + lastMove.c * cellSize;
+                const lmY = padding + lastMove.r * cellSize;
+                ctx.beginPath();
+                ctx.arc(lmX, lmY, Math.max(1.5, cellSize * 0.14), 0, Math.PI * 2);
+                ctx.fillStyle = lastMove.type === 1 ? '#ef4444' : '#f59e0b';
+                ctx.fill();
+            }
+
+            // 繪製五子連線高亮
+            if (winningLine.length > 0) {
+                ctx.save();
+                ctx.strokeStyle = '#10b981';
+                ctx.lineWidth = 4;
+                ctx.shadowColor = '#10b981';
+                ctx.shadowBlur = 8;
+                ctx.beginPath();
+                const startX = padding + winningLine[0].c * cellSize;
+                const startY = padding + winningLine[0].r * cellSize;
+                ctx.moveTo(startX, startY);
+                for (let i = 1; i < winningLine.length; i++) {
+                    const nextX = padding + winningLine[i].c * cellSize;
+                    const nextY = padding + winningLine[i].r * cellSize;
+                    ctx.lineTo(nextX, nextY);
+                }
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+
+        // --- STREAMING_CHUNK: 繪製立體微投影棋子材質 ---
+        function drawStone(r, c, type) {
+            const x = padding + c * cellSize;
+            const y = padding + r * cellSize;
+            const radius = Math.max(1.5, cellSize * 0.43);
+
+            ctx.save();
+            ctx.shadowColor = 'rgba(0,0,0,0.4)';
+            ctx.shadowBlur = 5;
+            ctx.shadowOffsetX = 1.5;
+            ctx.shadowOffsetY = 2.5;
+
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            
+            const grad = ctx.createRadialGradient(
+                x - radius * 0.22, y - radius * 0.22, radius * 0.08,
+                x, y, radius
+            );
+
+            if (type === 1) {
+                grad.addColorStop(0, '#55555e');
+                grad.addColorStop(0.32, '#1e1e24');
+                grad.addColorStop(1, '#09090b');
+                ctx.fillStyle = grad;
+                ctx.fill();
+                
+                ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            } else {
+                grad.addColorStop(0, '#ffffff');
+                grad.addColorStop(0.38, '#f4f4f5');
+                grad.addColorStop(0.85, '#e4e4e7');
+                grad.addColorStop(1, '#a1a1aa');
+                ctx.fillStyle = grad;
+                ctx.fill();
+
+                ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        // --- STREAMING_CHUNK: 建立落子判斷與點擊監聽 ---
+        canvas.addEventListener('click', (e) => {
+            if (gameOver) return;
+            if (gameMode === 'pve' && currentTurn === 2) return;
+            if (onlineMode && currentTurn !== myPlayerColor) {
+                showToast("非您的回合，請稍候對手落子", "warning");
+                return;
+            }
+
+            const gridPos = getGridPosition(e);
+            if (!gridPos) return;
+
+            const { r, c } = gridPos;
+            if (board[r] && board[r][c] === 0) {
+                if (onlineMode) {
+                    executeOnlineMove(r, c);
+                } else {
+                    makeMove(r, c);
+                }
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            const gridPos = getGridPosition(e);
+            if (!gridPos) {
+                if (hoverCell) {
+                    hoverCell = null;
+                    drawBoard();
+                }
+                return;
+            }
+
+            if (!hoverCell || hoverCell.r !== gridPos.r || hoverCell.c !== gridPos.c) {
+                hoverCell = gridPos;
+                drawBoard();
+            }
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+            hoverCell = null;
+            drawBoard();
+        });
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (gameOver) return;
+            if (gameMode === 'pve' && currentTurn === 2) return;
+            if (onlineMode && currentTurn !== myPlayerColor) return;
+
+            const touch = e.touches[0];
+            const gridPos = getGridPosition(touch);
+            if (!gridPos) return;
+
+            const { r, c } = gridPos;
+            if (board[r] && board[r][c] === 0) {
+                if (onlineMode) {
+                    executeOnlineMove(r, c);
+                } else {
+                    makeMove(r, c);
+                }
+            }
+        }, { passive: false });
+
+        function getGridPosition(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.clientX || e.pageX;
+            const clientY = e.clientY || e.pageY;
+            
+            const x = clientX - rect.left;
+            const y = clientY - rect.top;
+
+            const c = Math.round((x - padding) / cellSize);
+            const r = Math.round((y - padding) / cellSize);
+
+            if (r >= 0 && r < boardSize && c >= 0 && c < boardSize) {
+                const targetX = padding + c * cellSize;
+                const targetY = padding + r * cellSize;
+                const dist = Math.sqrt((x - targetX)**2 + (y - targetY)**2);
+                if (dist < cellSize * 0.45) {
+                    return { r, c };
+                }
+            }
+            return null;
+        }
+
+        // --- STREAMING_CHUNK: 本地端落子與勝負邏輯處理 ---
+        function makeMove(r, c) {
+            board[r][c] = currentTurn;
+            lastMove = { r, c, type: currentTurn };
+            
+            history.push({ r, c, type: currentTurn });
+            redoStack = [];
+            
+            updateUndoRedoButtons();
+            window.playStoneSound();
+
+            const winResult = checkWin(r, c, currentTurn);
+            if (winResult) {
+                gameOver = true;
+                winningLine = winResult;
+                drawBoard();
+                showWinner(currentTurn === 1 ? '黑子' : '白子', '五子連線，功德圓滿！');
+                return;
+            }
+
+            if (checkDraw()) {
+                gameOver = true;
+                drawBoard();
+                showWinner('平局', '盤面已滿，棋逢對手！');
+                return;
+            }
+
+            currentTurn = currentTurn === 1 ? 2 : 1;
+            updateTurnIndicator();
+            drawBoard();
+
+            // 人機決策
+            if (gameMode === 'pve' && currentTurn === 2 && !gameOver) {
+                document.getElementById('turn-announcement').innerText = 'AI正在深思熟慮中...';
+                document.getElementById('turn-announcement').classList.add('animate-pulse');
+                
+                setTimeout(() => {
+                    runAIMove();
+                }, 400);
+            }
+        }
+
+        function runAIMove() {
+            if (gameOver) return;
+
+            const bestMove = getBestMove();
+            if (bestMove) {
+                makeMove(bestMove.r, bestMove.c);
+            }
+        }
+
+        // --- STREAMING_CHUNK: 啟發式評估 AI 決策演算法 ---
+        function getBestMove() {
+            let maxScore = -1;
+            let bestPoints = [];
+
+            for (let r = 0; r < boardSize; r++) {
+                for (let c = 0; c < boardSize; c++) {
+                    if (board[r] && board[r][c] === 0) {
+                        const aiScore = evaluatePoint(r, c, 2);
+                        const playerScore = evaluatePoint(r, c, 1);
+                        
+                        let score = 0;
+                        if (aiDifficulty === 'easy') {
+                            score = aiScore * 0.4 + playerScore * 0.6 + Math.random() * 12;
+                        } else if (aiDifficulty === 'medium') {
+                            score = Math.max(aiScore, playerScore);
+                        } else {
+                            score = aiScore * 1.0 + playerScore * 1.15; 
+                        }
+
+                        if (checkWin(r, c, 2)) score = 10000000;
+                        else if (checkWin(r, c, 1)) score = 5000000;
+
+                        if (score > maxScore) {
+                            maxScore = score;
+                            bestPoints = [{ r, c }];
+                        } else if (score === maxScore) {
+                            bestPoints.push({ r, c });
+                        }
+                    }
+                }
+            }
+
+            if (bestPoints.length === 0) return null;
+            return bestPoints[Math.floor(Math.random() * bestPoints.length)];
+        }
+
+        function evaluatePoint(r, c, color) {
+            let totalScore = 0;
+            const directions = [
+                { dr: 0, dc: 1 },
+                { dr: 1, dc: 0 },
+                { dr: 1, dc: 1 },
+                { dr: 1, dc: -1 }
+            ];
+
+            for (const { dr, dc } of directions) {
+                let sequence = [];
+                for (let i = -4; i <= 4; i++) {
+                    const nr = r + i * dr;
+                    const nc = c + i * dc;
+                    if (nr >= 0 && nr < boardSize && nc >= 0 && nc < boardSize && board[nr]) {
+                        sequence.push(board[nr][nc]);
+                    } else {
+                        sequence.push(-1);
+                    }
+                }
+                totalScore += getSequenceScore(sequence, color);
+            }
+
+            const center = Math.floor(boardSize / 2);
+            const distToCenter = Math.abs(r - center) + Math.abs(c - center);
+            totalScore += (boardSize * 2 - distToCenter) * 0.12;
+
+            return totalScore;
+        }
+
+        function getSequenceScore(seq, color) {
+            const mid = 4;
+            seq[mid] = color;
+            
+            let score = 0;
+            const enemyColor = color === 1 ? 2 : 1;
+
+            for (let start = 0; start <= 4; start++) {
+                const window = seq.slice(start, start + 5);
+                
+                if (window.includes(enemyColor) || window.includes(-1)) {
+                    continue;
+                }
+
+                const count = window.filter(x => x === color).length;
+                switch (count) {
+                    case 5: score += 120000; break;
+                    case 4: score += 12000; break;
+                    case 3: score += 1200; break;
+                    case 2: score += 120; break;
+                    case 1: score += 12; break;
+                }
+            }
+            return score;
+        }
+
+        // --- STREAMING_CHUNK: 五子連線偵測演算法 ---
+        function checkWin(r, c, type) {
+            const directions = [
+                { dr: 0, dc: 1 },
+                { dr: 1, dc: 0 },
+                { dr: 1, dc: 1 },
+                { dr: 1, dc: -1 }
+            ];
+
+            for (const { dr, dc } of directions) {
+                let pts = [{r, c}];
+
+                let step = 1;
+                while (true) {
+                    const nr = r + step * dr;
+                    const nc = c + step * dc;
+                    if (nr >= 0 && nr < boardSize && nc >= 0 && nc < boardSize && board[nr] && board[nr][nc] === type) {
+                        pts.push({r: nr, c: nc});
+                        step++;
+                    } else {
+                        break;
+                    }
+                }
+
+                step = 1;
+                while (true) {
+                    const nr = r - step * dr;
+                    const nc = c - step * dc;
+                    if (nr >= 0 && nr < boardSize && nc >= 0 && nc < boardSize && board[nr] && board[nr][nc] === type) {
+                        pts.unshift({r: nr, c: nc});
+                        step++;
+                    } else {
+                        break;
+                    }
+                }
+
+                if (pts.length >= 5) {
+                    return pts;
+                }
+            }
+            return null;
+        }
+
+        function checkDraw() {
+            for (let r = 0; r < boardSize; r++) {
+                if (!board[r]) continue;
+                for (let c = 0; c < boardSize; c++) {
+                    if (board[r][c] === 0) return false;
+                }
+            }
+            return true;
+        }
+
+        function updateTurnIndicator() {
+            const turnBox = document.getElementById('turn-announcement');
+            const blackPanel = document.getElementById('player-black-panel');
+            const whitePanel = document.getElementById('player-white-panel');
+
+            if (gameOver) {
+                turnBox.innerText = '本局對弈結束';
+                turnBox.classList.remove('animate-pulse');
+                blackPanel.className = 'flex items-center space-x-3 p-2 rounded-xl border border-transparent';
+                whitePanel.className = 'flex items-center space-x-3 p-2 rounded-xl border border-transparent';
+                return;
+            }
+
+            if (currentTurn === 1) {
+                if (onlineMode) {
+                    turnBox.innerText = myPlayerColor === 1 ? '輪到您下棋 (黑子)...' : '等候對手下棋 (黑子)...';
+                } else {
+                    turnBox.innerText = '輪到黑子落子...';
+                }
+                turnBox.className = 'py-2.5 text-center bg-zinc-800 border border-zinc-700 rounded-xl text-zinc-100 font-semibold text-sm';
+                
+                blackPanel.className = 'flex items-center space-x-3 p-2 rounded-xl border border-amber-500 bg-amber-500/10 shadow-lg';
+                whitePanel.className = 'flex items-center space-x-3 p-2 rounded-xl border border-transparent';
+            } else {
+                if (gameMode === 'pve') {
+                    turnBox.innerText = 'AI 思考中...';
+                    turnBox.className = 'py-2.5 text-center bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 font-semibold text-sm animate-pulse';
+                } else if (onlineMode) {
+                    turnBox.innerText = myPlayerColor === 2 ? '輪到您下棋 (白子)...' : '等候對手下棋 (白子)...';
+                    turnBox.className = 'py-2.5 text-center bg-zinc-800 border border-zinc-700 rounded-xl text-zinc-100 font-semibold text-sm';
+                } else {
+                    turnBox.innerText = '輪到白子落子...';
+                    turnBox.className = 'py-2.5 text-center bg-zinc-800 border border-zinc-700 rounded-xl text-zinc-100 font-semibold text-sm';
+                }
+                
+                blackPanel.className = 'flex items-center space-x-3 p-2 rounded-xl border border-transparent';
+                whitePanel.className = 'flex items-center space-x-3 p-2 rounded-xl border border-amber-500 bg-amber-500/10 shadow-lg';
+            }
+        }
+
+        function updateUndoRedoButtons() {
+            const btnUndo = document.getElementById('btn-undo');
+            const btnRedo = document.getElementById('btn-redo');
+
+            if (onlineMode) {
+                btnUndo.disabled = true;
+                btnRedo.disabled = true;
+                btnUndo.innerText = "線上不支持悔棋";
+            } else {
+                btnUndo.disabled = history.length === 0 || gameOver;
+                btnRedo.disabled = redoStack.length === 0 || gameOver;
+                btnUndo.innerText = `悔棋 (${history.length})`;
+            }
+        }
+
+        // --- STREAMING_CHUNK: 悔棋與復原動作監聽 ---
+        document.getElementById('btn-undo').addEventListener('click', () => {
+            if (onlineMode || history.length === 0 || gameOver) return;
+
+            if (gameMode === 'pve') {
+                if (history.length >= 2) {
+                    const lastAI = history.pop();
+                    const lastPlayer = history.pop();
+                    board[lastAI.r][lastAI.c] = 0;
+                    board[lastPlayer.r][lastPlayer.c] = 0;
+                    redoStack.push(lastPlayer, lastAI);
+                } else {
+                    const step = history.pop();
+                    board[step.r][step.c] = 0;
+                    redoStack.push(step);
+                }
+                currentTurn = 1;
+            } else {
+                const step = history.pop();
+                board[step.r][step.c] = 0;
+                redoStack.push(step);
+                currentTurn = step.type;
+            }
+
+            lastMove = history.length > 0 ? history[history.length - 1] : null;
+
+            updateUndoRedoButtons();
+            updateTurnIndicator();
+            drawBoard();
+        });
+
+        document.getElementById('btn-redo').addEventListener('click', () => {
+            if (onlineMode || redoStack.length === 0 || gameOver) return;
+
+            if (gameMode === 'pve') {
+                if (redoStack.length >= 2) {
+                    const stepPlayer = redoStack.pop();
+                    const stepAI = redoStack.pop();
+                    board[stepPlayer.r][stepPlayer.c] = stepPlayer.type;
+                    board[stepAI.r][stepAI.c] = stepAI.type;
+                    history.push(stepPlayer, stepAI);
+                }
+                currentTurn = 1;
+            } else {
+                const step = redoStack.pop();
+                board[step.r][step.c] = step.type;
+                history.push(step);
+                currentTurn = step.type === 1 ? 2 : 1;
+            }
+
+            lastMove = history.length > 0 ? history[history.length - 1] : null;
+
+            updateUndoRedoButtons();
+            updateTurnIndicator();
+            drawBoard();
+        });
+
+        function showWinner(winnerName, reason) {
+            const overlay = document.getElementById('winner-overlay');
+            const title = document.getElementById('winner-title');
+            const desc = document.getElementById('winner-reason');
+
+            title.innerText = `${winnerName} 獲得勝利！`;
+            desc.innerText = reason;
+            
+            overlay.classList.remove('opacity-0', 'pointer-events-none', 'scale-95');
+            overlay.classList.add('opacity-100', 'scale-100');
+        }
+
+        function hideWinnerOverlay() {
+            const overlay = document.getElementById('winner-overlay');
+            overlay.classList.remove('opacity-100', 'scale-100');
+            overlay.classList.add('opacity-0', 'pointer-events-none', 'scale-95');
+        }
+
+        // --- STREAMING_CHUNK: 線上對決房間建立與連線同步機制 (RULE 1, 2, 3) ---
+        function generateRoomCode() {
+            const chars = '0123456789';
+            let code = '';
+            for (let i = 0; i < 6; i++) {
+                code += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return code;
+        }
+
+        async function createOnlineRoom(roomIdInput = null) {
+            if (!dbAuthReady || !currentUser) {
+                showToast("雲端安全連線未就緒，請稍後重試", "warning");
+                return;
+            }
+
+            const roomId = roomIdInput || generateRoomCode();
+            
+            // RULE 1: 專屬厳格路徑
+            const roomDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', roomId);
+
+            const initialLobbyData = {
+                roomId: roomId,
+                hostId: currentUser.uid,
+                guestId: null,
+                hostName: "黑方宿主",
+                guestName: null,
+                status: 'waiting', 
+                boardSize: boardSize,
+                moves: [],          
+                currentTurn: 1,
+                winner: null,
+                lastInteraction: Date.now()
+            };
+
+            try {
+                await setDoc(roomDocRef, initialLobbyData);
+                currentRoomId = roomId;
+                myPlayerColor = 1; 
+                
+                showToast(`房間建立成功！房號：${roomId}`, "success");
+                setupRoomListener(roomId);
+                updateOnlineRoomUI(roomId, "等候其他對手連線...");
+            } catch (error) {
+                console.error("Create room error:", error);
+                showToast("建立雲端房間失敗，請重新嘗試", "error");
+            }
+        }
+
+        async function joinOnlineRoom(roomId) {
+            if (!dbAuthReady || !currentUser) {
+                showToast("與伺服器交握中，請稍候", "warning");
+                return;
+            }
+
+            // RULE 1: 專屬路徑
+            const roomDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', roomId);
+            
+            try {
+                const docSnap = await getDoc(roomDocRef);
+                if (!docSnap.exists()) {
+                    showToast("此房間號不存在，請確認代碼是否輸入正確", "error");
+                    return;
+                }
+
+                const roomData = docSnap.data();
+                if (roomData.status !== 'waiting' && roomData.guestId !== currentUser.uid) {
+                    showToast("此房間已有玩家正在對決中", "warning");
+                    return;
+                }
+
+                await updateDoc(roomDocRef, {
+                    guestId: currentUser.uid,
+                    guestName: "白方對手",
+                    status: 'playing',
+                    lastInteraction: Date.now()
+                });
+
+                currentRoomId = roomId;
+                myPlayerColor = 2; 
+                boardSize = roomData.boardSize;
+                document.getElementById('board-size-select').value = boardSize.toString();
+                
+                resizeCanvas();
+                setupRoomListener(roomId);
+                showToast("成功加入對局！棋局開始！", "success");
+            } catch (error) {
+                console.error("Join room error:", error);
+                showToast("加入房間失敗，請重試", "error");
+            }
+        }
+
+        // --- STREAMING_CHUNK: 快速配對模式與資料過濾 (RULE 2) ---
+        async function runQuickMatch() {
+            if (!dbAuthReady || !currentUser) {
+                showToast("伺服器同步中，請稍後", "warning");
+                return;
+            }
+
+            showToast("正在搜尋有空餘空位的對弈大廳...", "info");
+
+            try {
+                // RULE 2: 不在查詢中使用 where 與 orderBy 做複雜組合，直接 fetch 列表並在 JS 記憶體中過濾
+                const lobbiesCol = collection(db, 'artifacts', appId, 'public', 'data', 'lobbies');
+                const querySnapshot = await getDocs(lobbiesCol);
+                
+                let foundRoom = null;
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    if (data.status === 'waiting' && data.boardSize === boardSize && data.hostId !== currentUser.uid) {
+                        foundRoom = data.roomId;
+                    }
+                });
+
+                if (foundRoom) {
+                    await joinOnlineRoom(foundRoom);
+                } else {
+                    await createOnlineRoom();
+                }
+            } catch (error) {
+                console.error("Quick match error:", error);
+                showToast("配對失敗，將為您自動建立新大廳", "error");
+                await createOnlineRoom();
+            }
+        }
+
+        function setupRoomListener(roomId) {
+            if (unsubscribeRoom) {
+                unsubscribeRoom();
+            }
+
+            const roomDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', roomId);
+
+            unsubscribeRoom = onSnapshot(roomDocRef, (docSnap) => {
+                if (!docSnap.exists()) {
+                    showToast("該房間已被銷毀或註銷", "warning");
+                    exitOnlineMode();
+                    return;
+                }
+
+                const data = docSnap.data();
+                syncGameState(data);
+            }, (error) => {
+                console.error("Firestore sync error:", error);
+                showToast("對局資料同步中斷", "error");
+            });
+        }
+
+        // --- STREAMING_CHUNK: 跨多端棋局狀態無縫重繪機制 ---
+        function syncGameState(data) {
+            const blackLabel = document.getElementById('black-label');
+            const blackDesc = document.getElementById('black-desc');
+            const whiteLabel = document.getElementById('white-label');
+            const whiteDesc = document.getElementById('white-desc');
+
+            blackLabel.innerText = "先手黑子";
+            blackDesc.innerText = data.hostId === currentUser.uid ? "您 (房主)" : "線上對手 (房主)";
+            
+            if (data.guestId) {
+                whiteLabel.innerText = "後手白子";
+                whiteDesc.innerText = data.guestId === currentUser.uid ? "您 (加入者)" : "線上對手";
+            } else {
+                whiteLabel.innerText = "等候對手連線...";
+                whiteDesc.innerText = "房號為 " + data.roomId;
+            }
+
+            if (boardSize !== data.boardSize) {
+                boardSize = data.boardSize;
+                document.getElementById('board-size-select').value = boardSize.toString();
+                resizeCanvas();
+            }
+
+            board = Array(boardSize).fill(null).map(() => Array(boardSize).fill(0));
+            const newHistory = data.moves || [];
+            
+            newHistory.forEach((move, index) => {
+                board[move.r][move.c] = move.type;
+                if (index === newHistory.length - 1) {
+                    lastMove = move;
+                }
+            });
+
+            if (newHistory.length === 0) {
+                lastMove = null;
+            }
+
+            if (newHistory.length > history.length) {
+                window.playStoneSound();
+            }
+
+            history = [...newHistory];
+            currentTurn = data.currentTurn;
+            gameOver = data.status === 'ended';
+
+            if (lastMove) {
+                const winResult = checkWin(lastMove.r, lastMove.c, lastMove.type);
+                if (winResult) {
+                    gameOver = true;
+                    winningLine = winResult;
+                    showWinner(lastMove.type === 1 ? '黑子' : '白子', '五子連線，功德圓滿！');
+                } else if (checkDraw()) {
+                    gameOver = true;
+                    showWinner('平局', '盤局完滿，旗鼓相當！');
+                } else {
+                    hideWinnerOverlay();
+                    winningLine = [];
+                }
+            } else {
+                hideWinnerOverlay();
+                winningLine = [];
+            }
+
+            updateUndoRedoButtons();
+            updateTurnIndicator();
+            drawBoard();
+        }
+
+        async function executeOnlineMove(r, c) {
+            if (!currentRoomId || gameOver) return;
+
+            const roomDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', currentRoomId);
+            
+            try {
+                const docSnap = await getDoc(roomDocRef);
+                if (!docSnap.exists()) return;
+
+                const data = docSnap.data();
+                
+                if (data.currentTurn !== myPlayerColor || data.status !== 'playing') {
+                    return;
+                }
+
+                const newMoves = [...(data.moves || []), { r, c, type: myPlayerColor }];
+                const nextTurn = myPlayerColor === 1 ? 2 : 1;
+                
+                board[r][c] = myPlayerColor; 
+                const winResult = checkWin(r, c, myPlayerColor);
+                const isDraw = !winResult && checkDraw();
+                
+                let nextStatus = 'playing';
+                let winner = null;
+                if (winResult) {
+                    nextStatus = 'ended';
+                    winner = myPlayerColor;
+                } else if (isDraw) {
+                    nextStatus = 'ended';
+                    winner = 'draw';
+                }
+
+                await updateDoc(roomDocRef, {
+                    moves: newMoves,
+                    currentTurn: nextTurn,
+                    status: nextStatus,
+                    winner: winner,
+                    lastInteraction: Date.now()
+                });
+
+            } catch (error) {
+                console.error("Push online move error:", error);
+                showToast("落子雲端同步失敗，請再點擊落子一次", "error");
+            }
+        }
+
+        // --- STREAMING_CHUNK: 清理網址列與退出連線模式 (History 安全防禦) ---
+        function exitOnlineMode() {
+            if (unsubscribeRoom) {
+                unsubscribeRoom();
+                unsubscribeRoom = null;
+            }
+            currentRoomId = null;
+            myPlayerColor = null;
+            onlineMode = false;
+
+            // 安全防禦：防止沙盒與 blob 協定拋出 SecurityError
+            try {
+                if (window.history && window.history.replaceState && window.location.protocol !== 'blob:') {
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                }
+            } catch (e) {
+                console.warn("無法變更瀏覽器網址狀態 (受安全沙盒限制):", e);
+            }
+
+            document.getElementById('active-room-panel').classList.add('hidden');
+            document.getElementById('role-indicator').classList.add('hidden');
+            document.getElementById('board-size-select').disabled = false;
+            
+            gameMode = 'pve';
+            const modePvE = document.getElementById('mode-pve');
+            const modeOnline = document.getElementById('mode-online');
+            
+            modeOnline.className = 'py-2 text-xs rounded-lg text-zinc-400 transition hover:text-white flex items-center justify-center gap-1';
+            modePvE.className = 'py-2 text-xs rounded-lg bg-amber-600/20 text-amber-300 border border-amber-500/40 font-bold';
+            
+            document.getElementById('ai-difficulty-container').classList.remove('hidden');
+            
+            initGame();
+        }
+
+        async function leaveOnlineRoom() {
+            if (currentRoomId) {
+                try {
+                    const roomDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', currentRoomId);
+                    const docSnap = await getDoc(roomDocRef);
+                    
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        if (data.hostId === currentUser.uid) {
+                            await deleteDoc(roomDocRef);
+                            showToast("您已解散該線上房間", "info");
+                        } else {
+                            await updateDoc(roomDocRef, {
+                                guestId: null,
+                                guestName: null,
+                                status: 'waiting',
+                                lastInteraction: Date.now()
+                            });
+                            showToast("您已退出了目前棋局", "info");
+                        }
+                    }
+                } catch (e) {
+                    console.error("Leave room failed", e);
+                }
+            }
+            exitOnlineMode();
+        }
+
+        function updateOnlineRoomUI(roomId, statusText) {
+            document.getElementById('label-room-code').innerText = roomId;
+            document.getElementById('active-room-panel').classList.remove('hidden');
+            
+            const roleIndicator = document.getElementById('role-indicator');
+            roleIndicator.classList.remove('hidden');
+            roleIndicator.innerText = myPlayerColor === 1 ? "身份：黑子(房主)" : "身份：白子(挑戰者)";
+
+            document.getElementById('board-size-select').disabled = true; 
+        }
+
+        // --- STREAMING_CHUNK: 建立控制面板按鈕事件監聽 ---
+        const modePvE = document.getElementById('mode-pve');
+        const modePvP = document.getElementById('mode-pvp');
+        const modeOnline = document.getElementById('mode-online');
+        const difficultyContainer = document.getElementById('ai-difficulty-container');
+        const onlineLobbyContainer = document.getElementById('online-lobby-container');
+
+        const whiteLabel = document.getElementById('white-label');
+        const whiteDesc = document.getElementById('white-desc');
+
+        modePvE.addEventListener('click', () => {
+            if (onlineMode) leaveOnlineRoom();
+            gameMode = 'pve';
+            onlineMode = false;
+            
+            difficultyContainer.classList.remove('hidden');
+            onlineLobbyContainer.classList.add('hidden');
+
+            modePvE.className = 'py-2 text-xs rounded-lg bg-amber-600/20 text-amber-300 border border-amber-500/40 font-bold';
+            modePvP.className = 'py-2 text-xs rounded-lg text-zinc-400 transition hover:text-white';
+            modeOnline.className = 'py-2 text-xs rounded-lg text-zinc-400 transition hover:text-white flex items-center justify-center gap-1';
+            
+            whiteLabel.innerText = '後手白子';
+            whiteDesc.innerText = 'AI 智能';
+            
+            initGame();
+        });
+
+        modePvP.addEventListener('click', () => {
+            if (onlineMode) leaveOnlineRoom();
+            gameMode = 'pvp';
+            onlineMode = false;
+
+            difficultyContainer.classList.add('hidden');
+            onlineLobbyContainer.classList.add('hidden');
+
+            modePvP.className = 'py-2 text-xs rounded-lg bg-amber-600/20 text-amber-300 border border-amber-500/40 font-bold';
+            modePvE.className = 'py-2 text-xs rounded-lg text-zinc-400 transition hover:text-white';
+            modeOnline.className = 'py-2 text-xs rounded-lg text-zinc-400 transition hover:text-white flex items-center justify-center gap-1';
+            
+            whiteLabel.innerText = '後手白子';
+            whiteDesc.innerText = '本機挑戰者';
+            
+            initGame();
+        });
+
+        modeOnline.addEventListener('click', () => {
+            gameMode = 'online';
+            onlineMode = true;
+
+            difficultyContainer.classList.add('hidden');
+            onlineLobbyContainer.classList.remove('hidden');
+
+            modeOnline.className = 'py-2 text-xs rounded-lg bg-amber-600/20 text-amber-300 border border-amber-500/40 font-bold flex items-center justify-center gap-1';
+            modePvE.className = 'py-2 text-xs rounded-lg text-zinc-400 transition hover:text-white';
+            modePvP.className = 'py-2 text-xs rounded-lg text-zinc-400 transition hover:text-white';
+
+            whiteLabel.innerText = '等候對手加入...';
+            whiteDesc.innerText = '線上玩家';
+
+            if (!dbAuthReady) {
+                showToast("大廳正在嘗試取得雲端連線，請稍後對決...", "warning");
+            } else {
+                showToast("您已進入雲端大廳！請選擇配對或建立房間對決", "info");
+            }
+
+            initGame();
+        });
+
+        document.getElementById('btn-quick-match').addEventListener('click', runQuickMatch);
+        document.getElementById('btn-create-room').addEventListener('click', () => createOnlineRoom());
+        document.getElementById('btn-leave-room').addEventListener('click', leaveOnlineRoom);
+
+        document.getElementById('btn-join-room').addEventListener('click', () => {
+            const input = document.getElementById('input-room-code');
+            const code = input.value.trim();
+            if (code.length !== 6) {
+                showToast("請輸入正確的 6 位數房間代碼", "warning");
+                return;
+            }
+            joinOnlineRoom(code);
+            input.value = "";
+        });
+
+        // --- STREAMING_CHUNK: 一鍵複製邀請連結與環境防禦機制 ---
+        document.getElementById('btn-copy-room').addEventListener('click', () => {
+            if (currentRoomId) {
+                let shareUrl;
+                try {
+                    // 若在 Blob 或無 origin 之高度受限 sandbox 環境，自動智慧降級僅複製 6 位數房號，以免連結點開失效
+                    if (window.location.protocol === 'blob:' || window.location.origin === 'null' || !window.location.origin) {
+                        shareUrl = currentRoomId;
+                        showToast(`受沙盒安全限制，已為您改為僅複製房間號碼：${currentRoomId}`, "success");
+                    } else {
+                        shareUrl = `${window.location.origin}${window.location.pathname}?room=${currentRoomId}`;
+                        showToast("邀請對戰連結已複製至剪貼簿！傳送給朋友即可一鍵加入棋局！", "success");
+                    }
+                } catch (err) {
+                    shareUrl = currentRoomId;
+                    showToast(`已複製房間代碼：${currentRoomId}`, "success");
+                }
+                
+                // 利用 H5 傳統剪貼板以相容於受限之 IFrame 下
+                const el = document.createElement('textarea');
+                el.value = shareUrl;
+                document.body.appendChild(el);
+                el.select();
+                document.execCommand('copy');
+                document.body.removeChild(el);
+            }
+        });
+
+        const diffButtons = {
+            easy: document.getElementById('diff-easy'),
+            medium: document.getElementById('diff-medium'),
+            hard: document.getElementById('diff-hard')
+        };
+
+        Object.keys(diffButtons).forEach(diff => {
+            diffButtons[diff].addEventListener('click', () => {
+                aiDifficulty = diff;
+                Object.keys(diffButtons).forEach(d => {
+                    if (d === diff) {
+                        diffButtons[d].className = 'py-1.5 text-xs rounded-lg text-amber-400 font-bold bg-zinc-800';
+                    } else {
+                        diffButtons[d].className = 'py-1.5 text-xs rounded-lg text-zinc-400 transition hover:text-white';
+                    }
+                });
+                initGame();
+            });
+        });
+
+        const boardSizeSelect = document.getElementById('board-size-select');
+        boardSizeSelect.addEventListener('change', (e) => {
+            boardSize = parseInt(e.target.value);
+            resizeCanvas();
+            initGame();
+        });
+
+        async function handleRestart() {
+            if (onlineMode && currentRoomId) {
+                try {
+                    const roomDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'lobbies', currentRoomId);
+                    await updateDoc(roomDocRef, {
+                        moves: [],
+                        currentTurn: 1,
+                        status: 'playing',
+                        winner: null,
+                        lastInteraction: Date.now()
+                    });
+                    showToast("棋局已成功為兩端重啟！", "info");
+                } catch (e) {
+                    console.error("重置雲端失敗:", e);
+                }
+            } else {
+                initGame();
+            }
+        }
+
+        document.getElementById('btn-restart').addEventListener('click', handleRestart);
+        document.getElementById('btn-overlay-restart').addEventListener('click', handleRestart);
+
+        // --- STREAMING_CHUNK: 控制規則說明彈出視窗 ---
+        const btnRules = document.getElementById('btn-rules');
+        const modalRules = document.getElementById('modal-rules');
+        const btnCloseRules = document.getElementById('btn-close-rules');
+        const btnConfirmRules = document.getElementById('btn-confirm-rules');
+
+        function openRules() {
+            modalRules.classList.remove('opacity-0', 'pointer-events-none');
+        }
+        function closeRules() {
+            modalRules.classList.add('opacity-0', 'pointer-events-none');
+        }
+
+        btnRules.addEventListener('click', openRules);
+        btnCloseRules.addEventListener('click', closeRules);
+        btnConfirmRules.addEventListener('click', closeRules);
+        modalRules.addEventListener('click', (e) => {
+            if (e.target === modalRules) closeRules();
+        });
+
+        window.addEventListener('resize', resizeCanvas);
+        
+        // --- STREAMING_CHUNK: 棋局主程式載入點，優先防禦性初始化 (RULE 3) ---
+        window.onload = async function() {
+            // 先初始化棋盤多維度陣列
+            initGame();
+            resizeCanvas();
+            
+            // RULE 3: 優先執行雲端匿名與自訂 Token 授權
+            await authenticateUser();
+
+            // 檢查網址列參數，實現「一鍵帶房號進入」
+            try {
+                const urlParams = new URLSearchParams(window.location.search);
+                const roomFromUrl = urlParams.get('room');
+                if (roomFromUrl && roomFromUrl.length === 6) {
+                    showToast(`偵測到對局連結！正在自動為您加入房號：${roomFromUrl}...`, "info");
+                    
+                    gameMode = 'online';
+                    onlineMode = true;
+
+                    document.getElementById('ai-difficulty-container').classList.add('hidden');
+                    document.getElementById('online-lobby-container').classList.remove('hidden');
+
+                    document.getElementById('mode-online').className = 'py-2 text-xs rounded-lg bg-amber-600/20 text-amber-300 border border-amber-500/40 font-bold flex items-center justify-center gap-1';
+                    document.getElementById('mode-pve').className = 'py-2 text-xs rounded-lg text-zinc-400 transition hover:text-white';
+                    document.getElementById('mode-pvp').className = 'py-2 text-xs rounded-lg text-zinc-400 transition hover:text-white';
+
+                    document.getElementById('white-label').innerText = '正在進入線上大廳...';
+                    document.getElementById('white-desc').innerText = '線上玩家';
+
+                    await joinOnlineRoom(roomFromUrl);
+                }
+            } catch (err) {
+                console.warn("因安全防禦機制（或沙盒無 URL 權限），略過網址列房號參數抓取。");
+            }
+        };
+    </script>
+</body>
+</html>
